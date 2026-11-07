@@ -3,7 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>רשימת קניות</title>
+<title>קונים חכם</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#FAFAF7">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-512.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;700;800&display=swap" rel="stylesheet">
@@ -129,6 +133,18 @@ nav button .badge{background:var(--mark);color:var(--markInk);border-radius:99px
 @media (prefers-reduced-motion:reduce){.micbig,.live .pulse,.row.fresh,.srow.fresh{animation:none}}
 .namein{width:100%;padding:13px 14px;border:2px solid var(--line);border-radius:12px;background:var(--card);font-size:17px;margin-top:10px}
 .namein:focus{border-color:var(--ink);outline:none}
+.lists{display:flex;gap:8px;margin-top:10px}
+.lt{flex:1;border:2px solid var(--line);background:var(--card);border-radius:12px;padding:8px 6px;font-weight:700;font-size:15px}
+.lt.on{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.lt .n{background:var(--mark);color:var(--markInk);border-radius:99px;padding:0 7px;font-size:12px;margin-inline-start:4px}
+.ltlist{max-height:50vh;overflow:auto;margin-top:8px;border:1px solid var(--line);border-radius:12px}
+.lti{display:flex;align-items:center;gap:12px;padding:12px;border-top:1px solid var(--line);font-size:17px}
+.lti:first-child{border-top:0}
+.lti input{width:22px;height:22px;accent-color:var(--done);flex:none}
+.lti span{flex:1}.lti small{color:var(--muted)}.lti.has{opacity:.55}
+.lti em{font-style:normal;font-weight:700;background:var(--mark);color:var(--markInk);border-radius:6px;padding:0 6px;font-size:14px}
+.miss{display:block;font-size:12.5px;font-weight:700;color:var(--danger);line-height:1.3}
+.annc{width:100%;margin-top:12px}
 .linkbtn{border:0;background:none;color:var(--muted);font-size:14px;padding:8px 0 0;text-decoration:underline;text-underline-offset:3px}
 textarea.copy{width:100%;min-height:160px;margin-top:10px;border-radius:12px;border:2px solid var(--line);background:var(--card);padding:10px}
 </style>
@@ -140,6 +156,7 @@ textarea.copy{width:100%;min-height:160px;margin-top:10px;border-radius:12px;bor
       <h1 id="title">הרשימה</h1>
       <span class="sync" id="sync"><span class="dot"></span>טוען…</span>
     </div>
+    <div id="lists" class="lists"></div>
     <div id="live" class="live hidden" role="status"></div>
     <div id="headExtra"></div>
   </header>
@@ -184,7 +201,7 @@ function guessCat(name){
 const STARTER=[["חלב","חלב וביצים"],["ביצים","חלב וביצים"],["קוטג׳","חלב וביצים"],["גבינה צהובה","חלב וביצים"],["יוגורט","חלב וביצים"],["חמאה","חלב וביצים"],["לחם","לחם ומאפים"],["פיתות","לחם ומאפים"],["עגבניות","פירות וירקות"],["מלפפונים","פירות וירקות"],["בצל","פירות וירקות"],["תפוחי אדמה","פירות וירקות"],["גזר","פירות וירקות"],["פלפלים","פירות וירקות"],["בננות","פירות וירקות"],["תפוחים","פירות וירקות"],["לימונים","פירות וירקות"],["חזה עוף","בשר, עוף ודגים"],["שניצל","בשר, עוף ודגים"],["אורז","פסטה, אורז וקטניות"],["פסטה","פסטה, אורז וקטניות"],["פתיתים","פסטה, אורז וקטניות"],["אטריות","פסטה, אורז וקטניות"],["שמן זית","מזווה"],["סוכר","מזווה"],["קפה","מזווה"],["תה","מזווה"],["קורנפלקס","מזווה"],["טחינה","מזווה"],["טונה","שימורים ורטבים"],["רסק עגבניות","שימורים ורטבים"],["חומוס","שימורים ורטבים"],["מים מינרליים","שתייה"],["נייר טואלט","היגיינה ופארם"],["משחת שיניים","היגיינה ופארם"],["סבון כלים","ניקיון"],["אבקת כביסה","ניקיון"],["שקיות זבל","ניקיון"]];
 
 const LS="shoplist-v1";
-const S={items:{},pool:{},mode:"loading",db:null,fam:null,fid:null,readOnly:false,me:null,myName:"",mine:new Set(),fresh:new Set(),shoppers:[],presence:[],lastShop:null,rec:null,recCancel:false,loadedAt:0};
+const S={raw:{items:{},pool:{}},list:"super",meta:{},items:{},pool:{},mode:"loading",db:null,fam:null,fid:null,readOnly:false,me:null,myName:"",mine:new Set(),fresh:new Set(),shoppers:[],presence:[],lastShop:null,rec:null,recCancel:false,loadedAt:0};
 function byHtml(v){
   if(!v.by)return "";
   const who=v.by===S.me?"אני":(v.byName||"מישהו");
@@ -195,18 +212,62 @@ function byFields(){return S.me?{by:S.me,byName:S.myName||""}:{}}
 const queues={};
 function queued(key,fn){const p=(queues[key]||Promise.resolve()).then(fn,fn);queues[key]=p.catch(()=>{});return p}
 function rid(){return Math.random().toString(36).slice(2,10)+Date.now().toString(36)}
-function saveLocal(){try{localStorage.setItem(LS,JSON.stringify({items:S.items,pool:S.pool}))}catch(e){}}
-function loadLocal(){try{const d=JSON.parse(localStorage.getItem(LS)||"null");if(d){S.items=d.items||{};S.pool=d.pool||{}}}catch(e){}}
+function saveLocal(){try{localStorage.setItem(LS,JSON.stringify({items:S.raw.items,pool:S.raw.pool,meta:S.meta}))}catch(e){}}
+const LISTS=[{id:"super",name:"סופר",icon:"🛒",in:"בסופר"},{id:"pharm",name:"פארם",icon:"💊",in:"בפארם"}];
+const curL=()=>LISTS.find(l=>l.id===S.list)||LISTS[0];
+const inList=v=>(v.list||"super")===S.list;
+function applyList(){
+  const f=o=>{const r={};for(const k in o)if(inList(o[k]))r[k]=o[k];return r};
+  S.items=f(S.raw.items);S.pool=f(S.raw.pool);
+}
+function setList(id){
+  if(!LISTS.some(l=>l.id===id)||id===S.list)return;
+  S.list=id;try{localStorage.setItem("curList",id)}catch(_){}
+  poolEdit=false;S.lastShop=null;applyList();render();window.scrollTo(0,0);
+}
+function renderLists(){
+  const el=$("#lists");if(!el)return;
+  if(S.mode==="loading"){el.innerHTML="";return}
+  el.innerHTML=LISTS.map(l=>{const n=Object.values(S.raw.items).filter(v=>(v.list||"super")===l.id&&!v.done).length;
+    return `<button class="lt${l.id===S.list?" on":""}" data-list="${l.id}" aria-pressed="${l.id===S.list}">${l.icon} ${l.name}${n?` <span class="n">${n}</span>`:""}</button>`}).join("");
+  const sb=document.querySelector('nav button[data-v="shop"] span:last-child');if(sb)sb.textContent=curL().in;
+}
+function fmtAgo(ts){const d=Math.floor((Date.now()-(ts||0))/86400000);return d<=0?"היום":d===1?"אתמול":`לפני ${d} ימים`}
+function saveLastTrip(vs){
+  const data={items:vs.map(v=>({name:v.name,cat:v.cat||"אחר",qty:v.qty||1})),ts:Date.now(),by:S.myName||""};
+  const key="last_"+S.list;S.meta[key]=data;
+  if(S.mode==="db")S.fam.collection("meta").doc(key).set(data).catch(()=>{});else saveLocal();
+}
+function lastTripBar(){
+  const lt=S.meta["last_"+S.list];if(!lt||!lt.items||!lt.items.length)return "";
+  return `<div class="bar"><button class="btn ghost" id="lastTrip">🔁 הקנייה הקודמת · ${lt.items.length} מוצרים · ${fmtAgo(lt.ts)}</button></div>`;
+}
+function openLastTrip(){
+  const lt=S.meta["last_"+S.list];if(!lt||!lt.items)return;
+  const have=new Set(Object.values(S.items).filter(v=>!v.done).map(v=>v.name));
+  $("#sheet").innerHTML=`<div class="panel" role="dialog" aria-modal="true" aria-label="הקנייה הקודמת"><h3>🔁 הקנייה הקודמת</h3><p class="note">${fmtAgo(lt.ts)}${lt.by?` · ${esc(lt.by)}`:""}. מה שמסומן ייכנס לרשימה.</p><div class="ltlist">`+
+    lt.items.map((x,i)=>{const has=have.has(x.name);return `<label class="lti${has?" has":""}"><input type="checkbox" data-li="${i}" ${has?"disabled":"checked"}><span>${esc(x.name)}${x.qty>1?` <em>×${x.qty}</em>`:""}</span>${has?"<small>כבר ברשימה</small>":""}</label>`}).join("")+
+    `</div><div class="bar"><button class="btn" id="ltGo">הוספה לרשימה</button><button class="btn ghost" id="ltToggle">סימון/ביטול הכול</button><button class="btn ghost" id="sheetClose">ביטול</button></div></div>`;
+  $("#sheet").classList.remove("hidden");
+}
+function ltAdd(){
+  const lt=S.meta["last_"+S.list];if(!lt)return;
+  const idx=[...document.querySelectorAll('#sheet input[data-li]:checked')].map(i=>+i.dataset.li);
+  hideSheet();
+  idx.forEach(i=>{const x=lt.items[i];if(x)addItem(x.name,x.cat,x.qty)});
+  if(idx.length)showToast(`${idx.length} מוצרים נוספו מהקנייה הקודמת`);
+}
+function loadLocal(){try{const d=JSON.parse(localStorage.getItem(LS)||"null");if(d){S.raw.items=d.items||{};S.raw.pool=d.pool||{};S.meta=d.meta||{}}}catch(e){}applyList()}
 
 const api={
   set(col,id,data){
-    S[col][id]={...data};
+    S.raw[col][id]={...data};applyList();
     if(col==="items")S.mine.add(id);
     if(S.mode==="db") return queued(col+id,()=>S.fam.collection(col).doc(id).set(data).catch(fail));
     saveLocal();render();
   },
   del(col,id){
-    delete S[col][id];
+    delete S.raw[col][id];applyList();
     if(S.mode==="db") return queued(col+id,()=>S.fam.collection(col).doc(id).delete().catch(fail));
     saveLocal();render();
   },
@@ -313,11 +374,12 @@ function renderLive(){
   if(!list.length){el.classList.add("hidden");el.innerHTML="";return}
   const names=[...new Set(list.map(p=>p.name||"מישהו"))];
   const who=names.length===1?names[0]:names.slice(0,-1).join(", ")+" ו"+names[names.length-1];
-  el.innerHTML=`<span class="pulse"></span><span>🛒 ${esc(who)} בסופר עכשיו. מה שתוסיף יופיע שם מיד.</span>`;
+  const L=LISTS.find(l=>l.id===(list[0].list||"super"))||LISTS[0];
+  el.innerHTML=`<span class="pulse"></span><span>${L.icon} ${esc(who)} ${L.in} עכשיו. מה שתוסיף ל${L.name} יופיע שם מיד.</span>`;
   el.classList.remove("hidden");
 }
 document.addEventListener("visibilitychange",()=>{try{renderLive()}catch(_){}});
-function writePresence(sh){if(!S.fam||!S.me)return;S.fam.collection("presence").doc(S.me).set({name:S.myName||"מישהו",shopping:!!sh,ts:Date.now()}).catch(()=>{})}
+function writePresence(sh){if(!S.fam||!S.me)return;S.fam.collection("presence").doc(S.me).set({name:S.myName||"מישהו",shopping:!!sh,list:S.list,ts:Date.now()}).catch(()=>{})}
 function computeShoppers(){const now=Date.now();S.shoppers=(S.presence||[]).filter(p=>p.id!==S.me&&p.shopping===true&&now-(p.ts||0)<150000)}
 window.addEventListener("pagehide",()=>{if(S.lastShop)writePresence(false)});
 function askName(){
@@ -337,12 +399,18 @@ async function invite(){
   if(navigator.share){try{await navigator.share({title:"רשימת קניות",text});return}catch(e){if(e&&e.name==="AbortError")return}}
   location.href="https://wa.me/?text="+encodeURIComponent(text);
 }
+function announce(){
+  if(!S.fid)return;
+  const url=location.origin+location.pathname+"?f="+S.fid;
+  const text=`${curL().icon} ${S.myName||"אני"} ${curL().in} עכשיו, מה להוסיף?\nמוסיפים כאן ואני רואה מיד:\n${url}`;
+  location.href="https://wa.me/?text="+encodeURIComponent(text);
+}
 function famBar(){
   if(S.mode!=="db")return "";
   return `<div class="bar"><button class="btn ghost" id="invite">👨‍👩‍👧 הזמנת המשפחה</button><button class="btn ghost" id="changeName">👤 ${esc(S.myName||"השם שלי")}</button></div>`;
 }
 function notifyNew(list){
-  list=list.filter(([,v])=>v&&!v.done&&!(S.me&&v.by===S.me));
+  list=list.filter(([,v])=>v&&!v.done&&inList(v)&&!(S.me&&v.by===S.me));
   if(!list.length)return;
   list.forEach(([id])=>S.fresh.add(id));
   setTimeout(()=>{list.forEach(([id])=>S.fresh.delete(id))},4000);
@@ -369,7 +437,7 @@ function addList(list,cat,target){
   if(!list||!list.length)return;
   if(target==="pool"){
     let n=0;
-    list.forEach(({name})=>{if(!findPool(name)){api.set("pool",api.newId("pool"),{name,cat:cat||guessCat(name),uses:0});n++}});
+    list.forEach(({name})=>{if(!findPool(name)){api.set("pool",api.newId("pool"),{name,cat:cat||guessCat(name),uses:0,list:S.list});n++}});
     render();
     if(list.length>1)showToast(n?`${n} מוצרים נוספו לקבועים`:"כל המוצרים כבר בקבועים");
   } else {
@@ -384,17 +452,49 @@ function addItem(raw,cat,q){
   if(ex){const [id,v]=ex; api.set("items",id,v.done?{...v,done:false,qty:q,...byFields()}:{...v,qty:(v.qty||1)+q}); render(); return;}
   const p=findPool(name);
   const c=cat||(p&&p[1].cat)||guessCat(name);
-  api.set("items",api.newId("items"),{name,cat:c,qty:q,done:false,ts:Date.now(),...byFields()});
+  api.set("items",api.newId("items"),{name,cat:c,qty:q,done:false,ts:Date.now(),list:S.list,...byFields()});
   if(p) api.set("pool",p[0],{...p[1],uses:(p[1].uses||0)+1});
-  else api.set("pool",api.newId("pool"),{name,cat:c,uses:1});
+  else api.set("pool",api.newId("pool"),{name,cat:c,uses:1,list:S.list});
   render();
 }
-function toggleDone(id){const v=S.items[id];if(!v)return;api.set("items",id,{...v,done:!v.done,doneTs:Date.now()});render()}
+function toggleDone(id){const v=S.items[id];if(!v)return;api.set("items",id,{...v,done:!v.done,doneTs:Date.now(),missed:false});render()}
+function missHtml(v){return v.missed&&!v.done?`<span class="miss">⚠️ לא היה בפעם הקודמת</span>`:""}
+function finishTrip(){
+  const all=Object.entries(S.items),got=all.filter(([,v])=>v.done),left=all.filter(([,v])=>!v.done);
+  if(!left.length){clearDone();return}
+  const others=LISTS.filter(l=>l.id!==S.list);
+  $("#sheet").innerHTML=`<div class="panel" role="dialog" aria-modal="true" aria-label="סיום קנייה"><h3>סיום קנייה</h3>
+    <p class="note">נקנו ${got.length}. <b>${left.length} לא נקנו</b>, והם לא נמחקים:</p>
+    <div class="ltlist">${left.map(([,v])=>`<div class="lti"><span>${esc(v.name)}${(v.qty||1)>1?` <em>×${v.qty}</em>`:""}</span></div>`).join("")}</div>
+    <div class="bar"><button class="btn" id="keepLeft">להשאיר ל${curL().name} בפעם הבאה</button>${others.map(l=>`<button class="btn ghost" data-moveto="${l.id}">להעביר ל${l.icon} ${l.name}</button>`).join("")}<button class="btn ghost" id="sheetClose">ביטול</button></div></div>`;
+  $("#sheet").classList.remove("hidden");
+}
+function keepLeft(){
+  const left=Object.entries(S.items).filter(([,v])=>!v.done);
+  hideSheet();
+  left.forEach(([id,v])=>api.set("items",id,{...v,missed:true}));
+  clearDone();
+  showToast(`${left.length} מוצרים מחכים לפעם הבאה ⚠️`);
+}
+function moveLeft(to){
+  const L=LISTS.find(l=>l.id===to);if(!L)return;
+  const left=Object.entries(S.items).filter(([,v])=>!v.done);
+  hideSheet();
+  left.forEach(([id,v])=>{
+    const ex=Object.entries(S.raw.items).find(([,x])=>(x.list||"super")===to&&x.name===v.name&&!x.done);
+    if(ex){api.set("items",ex[0],{...ex[1],qty:(ex[1].qty||1)+(v.qty||1),missed:true});api.del("items",id)}
+    else api.set("items",id,{...v,list:to,missed:true});
+    if(!Object.values(S.raw.pool).some(p=>(p.list||"super")===to&&p.name===v.name))api.set("pool",api.newId("pool"),{name:v.name,cat:v.cat||guessCat(v.name),uses:1,list:to});
+  });
+  clearDone();
+  showToast(`${left.length} מוצרים הועברו ל${L.name}`);
+}
 function setQty(id,q){const v=S.items[id];if(!v)return;if(q<1){removeItem(id);return}api.set("items",id,{...v,qty:q});render()}
 function removeItem(id){const v=S.items[id];if(!v)return;api.del("items",id);render();showToast(`${v.name} הוסר`,()=>{api.set("items",id,v);render()})}
 function clearDone(){
   const done=Object.entries(S.items).filter(([,v])=>v.done);
   if(!done.length)return;
+  saveLastTrip(done.map(([,v])=>v));
   done.forEach(([id])=>api.del("items",id));render();
   showToast(`${done.length} מוצרים נוקו מהרשימה`,()=>{done.forEach(([id,v])=>api.set("items",id,v));render()});
 }
@@ -410,7 +510,8 @@ function poolTap(pid){
   addItem(p.name,p.cat);
 }
 function poolRemove(pid){const v=S.pool[pid];api.del("pool",pid);render();showToast(`${v.name} הוסר מהקבועים`,()=>{api.set("pool",pid,v);render()})}
-function loadStarter(){STARTER.forEach(([name,cat])=>{if(!findPool(name))api.set("pool",api.newId("pool"),{name,cat,uses:0})});render()}
+const PHARM_STARTER=["משחת שיניים","מברשת שיניים","חוט דנטלי","שמפו","מרכך שיער","סבון גוף","דאודורנט","קרם הגנה","קרם ידיים","סכיני גילוח","צמר גפן","מקלוני אוזניים","מגבונים","טישו","נייר טואלט","פלסטרים","אקמול","חיתולים"].map(n=>[n,guessCat(n)]);
+function loadStarter(){(S.list==="pharm"?PHARM_STARTER:STARTER).forEach(([name,cat])=>{if(!findPool(name))api.set("pool",api.newId("pool"),{name,cat,uses:0,list:S.list})});render()}
 
 function openCat(pid){
   const p=S.pool[pid];if(!p)return;
@@ -457,6 +558,7 @@ function grouped(list){
 function catOptions(){return `<option value="">מחלקה: אוטומטי</option>`+CATS.map(c=>`<option>${esc(c)}</option>`).join("")}
 
 function render(){
+  renderLists();
   renderLive();
   document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on",b.dataset.v===view));
   const open=Object.values(S.items).filter(v=>!v.done).length;
@@ -498,12 +600,12 @@ function renderList(){
       (doneCount?`<div class="bar"><button class="btn ghost" id="clearDone">ניקוי ${doneCount} שנקנו</button></div>`:"");
   } else {
     $("#main").innerHTML=grouped(items).map(([c,list])=>`<section class="group"><h2><span>${esc(c)}</span><span>${list.length}</span></h2><div class="rows">`+
-      list.map(([id,v])=>`<div class="row${S.fresh.has(id)?" fresh":""}"><span class="name">${esc(v.name)}${byHtml(v)}</span>
+      list.map(([id,v])=>`<div class="row${S.fresh.has(id)?" fresh":""}"><span class="name">${esc(v.name)}${missHtml(v)}${byHtml(v)}</span>
         <span class="qty"><button data-q="${id}" data-d="-1" aria-label="פחות">−</button><span>${v.qty||1}</span><button data-q="${id}" data-d="1" aria-label="עוד">+</button></span>
         <button class="del" data-del="${id}" aria-label="הסרת ${esc(v.name)}">✕</button></div>`).join("")+`</div></section>`).join("")+
       `<div class="bar"><button class="btn mark" data-go="shop">🛒 יוצא לסופר</button><button class="btn ghost" id="share">העתקה כטקסט</button><button class="btn ghost" id="clearAll">ניקוי הרשימה</button>${doneCount?`<button class="btn ghost" id="clearDone">ניקוי ${doneCount} שנקנו</button>`:""}</div><div id="copyBox"></div>`;
   }
-  $("#main").insertAdjacentHTML("beforeend",famBar());
+  $("#main").insertAdjacentHTML("beforeend",lastTripBar()+famBar());
 }
 
 function renderPool(){
@@ -522,14 +624,15 @@ function renderPool(){
 }
 
 function renderShop(){
-  $("#title").textContent="בסופר";
+  $("#title").textContent=curL().in;
   const all=Object.entries(S.items);
   const done=all.filter(([,v])=>v.done).length, total=all.length;
-  $("#headExtra").innerHTML=total?`<div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="${total}" aria-valuenow="${done}"><i style="width:${total?done/total*100:0}%"></i></div>
-    <div class="stat"><span>${done} מתוך ${total} בעגלה</span><span>${total-done?`נשארו ${total-done}`:"הכול בעגלה 🎉"}</span></div>`:"";
+  const ann=S.mode==="db"?`<button class="btn mark annc" id="announce">📣 עדכון המשפחה שאני ${curL().in}</button>`:"";
+  $("#headExtra").innerHTML=ann+(total?`<div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="${total}" aria-valuenow="${done}"><i style="width:${total?done/total*100:0}%"></i></div>
+    <div class="stat"><span>${done} מתוך ${total} בעגלה</span><span>${total-done?`נשארו ${total-done}`:"הכול בעגלה 🎉"}</span></div>`:"");
   if(!total){$("#main").innerHTML=`<div class="empty"><b>אין מה לקנות</b>הוסף מוצרים לרשימה לפני היציאה לסופר.<br><button class="btn" data-go="list">לרשימה</button></div>`;return}
   const todo=all.filter(([,v])=>!v.done), got=all.filter(([,v])=>v.done).sort((a,b)=>(b[1].doneTs||0)-(a[1].doneTs||0));
-  const row=([id,v])=>`<button class="srow ${v.done?"done":""}${S.fresh.has(id)?" fresh":""}" data-t="${id}" aria-pressed="${!!v.done}"><span class="box">${check}</span><span class="sname">${esc(v.name)}${(v.qty||1)>1?`<em>×${v.qty}</em>`:""}${byHtml(v)}</span></button>`;
+  const row=([id,v])=>`<button class="srow ${v.done?"done":""}${S.fresh.has(id)?" fresh":""}" data-t="${id}" aria-pressed="${!!v.done}"><span class="box">${check}</span><span class="sname">${esc(v.name)}${(v.qty||1)>1?`<em>×${v.qty}</em>`:""}${missHtml(v)}${byHtml(v)}</span></button>`;
   $("#main").innerHTML=grouped(todo).map(([c,list])=>`<section class="group"><h2><span>${esc(c)}</span><span>${list.length}</span></h2><div class="rows">${list.map(row).join("")}</div></section>`).join("")+
     (got.length?`<section class="group"><h2><span>בעגלה</span><span>${got.length}</span></h2><div class="rows">${got.map(row).join("")}</div></section>`:"")+
     `<div class="bar">${got.length?`<button class="btn" id="finish">סיימתי, ניקוי ${got.length} שנקנו</button>`:""}</div>`;
@@ -548,6 +651,13 @@ document.addEventListener("click",e=>{
   if(t.id==="sheetClose"){closeSheet();return}
   if(t.id==="nameSave"){saveName();return}
   if(t.id==="invite"){invite();return}
+  if(t.id==="announce"){announce();return}
+  if(t.dataset.list){setList(t.dataset.list);return}
+  if(t.id==="lastTrip"){openLastTrip();return}
+  if(t.id==="ltGo"){ltAdd();return}
+  if(t.id==="keepLeft"){keepLeft();return}
+  if(t.dataset.moveto){moveLeft(t.dataset.moveto);return}
+  if(t.id==="ltToggle"){const bs=[...document.querySelectorAll('#sheet input[data-li]:not(:disabled)')];const on=bs.some(b=>!b.checked);bs.forEach(b=>b.checked=on);return}
   if(t.id==="changeName"){askName();return}
   if(t.dataset.pool){(poolEdit&&view==="pool")?openCat(t.dataset.pool):poolTap(t.dataset.pool);return}
   if(t.dataset.prm){poolRemove(t.dataset.prm);return}
@@ -556,7 +666,8 @@ document.addEventListener("click",e=>{
   if(t.dataset.t){toggleDone(t.dataset.t);if(navigator.vibrate)try{navigator.vibrate(12)}catch(_){};return}
   if(t.id==="starter")loadStarter();
   if(t.id==="poolEdit"){poolEdit=!poolEdit;render()}
-  if(t.id==="clearDone"||t.id==="finish")clearDone();
+  if(t.id==="clearDone")clearDone();
+  if(t.id==="finish")finishTrip();
   if(t.id==="clearAll")clearAll();
   if(t.id==="share")share();
 });
@@ -585,6 +696,7 @@ function getFamilyId(){
   if(u.searchParams.get("f")!==f){u.searchParams.set("f",f);try{history.replaceState(null,"",u.toString())}catch(_){}}
   return f;
 }
+try{const c=localStorage.getItem("curList");if(LISTS.some(l=>l.id===c))S.list=c}catch(_){}
 render();
 (async()=>{
   const offline=msg=>{S.mode="local";loadLocal();render();migrateCats();if(msg)showToast(msg)};
@@ -609,10 +721,11 @@ render();
     S.fam.collection(col).onSnapshot(snap=>{
       const m={};snap.docs.forEach(d=>{if(d.exists)m[d.id]=d.data()});
       if(col==="items"&&got.items&&S.loadedAt&&Date.now()-S.loadedAt>3000){try{notifyNew(snap.docChanges().filter(c=>c.type==="added"&&!S.mine.has(c.doc.id)&&!c.doc.metadata.hasPendingWrites).map(c=>[c.doc.id,c.doc.data()]))}catch(_){}}
-      S[col]=m;got[col]=true;
+      S.raw[col]=m;applyList();got[col]=true;
       if(got.items&&got.pool){clearTimeout(timer);if(!S.loadedAt)S.loadedAt=Date.now();render();migrateCats()}
     },err=>{clearTimeout(timer);offline(err&&err.code==="permission-denied"?"אין הרשאה לרשימה, בדוק את כללי Firebase":"הסנכרון לא זמין, עובד מהמכשיר")});
   });
+  S.fam.collection("meta").onSnapshot(snap=>{const m={};snap.docs.forEach(d=>{m[d.id]=d.data()});S.meta=m;if(S.loadedAt)render()},()=>{});
   S.fam.collection("presence").onSnapshot(snap=>{S.presence=snap.docs.map(d=>({id:d.id,...d.data()}));computeShoppers();renderLive()},()=>{});
   setInterval(()=>{if(S.lastShop&&!document.hidden)writePresence(true);computeShoppers();renderLive()},45000);
   if(!S.myName)setTimeout(askName,900);
