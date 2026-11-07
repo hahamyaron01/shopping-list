@@ -144,6 +144,17 @@ nav button .badge{background:var(--mark);color:var(--markInk);border-radius:99px
 .lti span{flex:1}.lti small{color:var(--muted)}.lti.has{opacity:.55}
 .lti em{font-style:normal;font-weight:700;background:var(--mark);color:var(--markInk);border-radius:6px;padding:0 6px;font-size:14px}
 .miss{display:block;font-size:12.5px;font-weight:700;color:var(--danger);line-height:1.3}
+.srw{display:flex;align-items:stretch;border-top:1px solid var(--line)}
+.srw:first-child{border-top:0}
+.srw .srow{border-top:0;flex:1;min-width:0}
+.nplay{flex:none;width:60px;border:0;border-inline-start:1px solid var(--line);background:var(--chip);font-size:24px}
+.nplay.on{background:var(--mark)}
+.nt{display:block;font-size:14px;font-weight:500;line-height:1.35;margin-top:2px;color:var(--ink)}
+.nbtn{width:36px;height:36px;border:0;border-radius:10px;background:transparent;font-size:18px;flex:none;filter:grayscale(1);opacity:.45}
+.nbtn.has{filter:none;opacity:1;background:var(--mark)}
+.recarea{display:flex;flex-direction:column;gap:10px;margin-top:12px}
+.recarea audio{width:100%}
+.btn.rec{background:var(--danger);color:#fff}
 .annc{width:100%;margin-top:12px}
 .linkbtn{border:0;background:none;color:var(--muted);font-size:14px;padding:8px 0 0;text-decoration:underline;text-underline-offset:3px}
 textarea.copy{width:100%;min-height:160px;margin-top:10px;border-radius:12px;border:2px solid var(--line);background:var(--card);padding:10px}
@@ -458,6 +469,60 @@ function addItem(raw,cat,q){
   render();
 }
 function toggleDone(id){const v=S.items[id];if(!v)return;api.set("items",id,{...v,done:!v.done,doneTs:Date.now(),missed:false});render()}
+function noteLine(v){let s="";if(v.noteText)s+=`<span class="nt">📝 ${esc(v.noteText)}</span>`;if(v.noteAudio)s+=`<span class="nt">🔊 הערה קולית${v.noteBy?` מ${esc(v.noteBy)}`:""}${v.noteDur?` · ${v.noteDur} שנ׳`:""}</span>`;return s}
+function openNote(id){
+  const v=S.items[id];if(!v)return;
+  S.nd={id,audio:v.noteAudio||"",dur:v.noteDur||0};
+  $("#sheet").innerHTML=`<div class="panel" role="dialog" aria-modal="true" aria-label="הערה"><h3>💬 הערה ל${esc(v.name)}</h3><p class="note">מי שבסופר יראה וישמע את זה ליד המוצר.</p><textarea id="noteText" class="copy" maxlength="200" placeholder="למשל: רק של 5%, לא 9">${esc(v.noteText||"")}</textarea><div class="recarea" id="recArea"></div><div class="bar"><button class="btn" id="noteSave">שמירה</button><button class="btn ghost" id="sheetClose">ביטול</button></div></div>`;
+  $("#sheet").classList.remove("hidden");renderRec();
+}
+function renderRec(){
+  const a=$("#recArea");if(!a||!S.nd)return;
+  if(S.rec2){a.innerHTML=`<button class="btn rec" id="recBtn">⏹️ עצירה · <span id="recT">${S.rec2.t}</span>/20</button>`;return}
+  a.innerHTML=(S.nd.audio?`<audio controls preload="metadata" src="${S.nd.audio}"></audio><button class="btn ghost" id="recDel">🗑️ מחיקת ההקלטה</button>`:"")+`<button class="btn mark" id="recBtn">🎤 ${S.nd.audio?"הקלטה מחדש":"הקלטת הערה קולית"} (עד 20 שנ׳)</button>`;
+}
+async function toggleRec(){
+  if(S.rec2){stopRec();return}
+  if(!navigator.mediaDevices||!window.MediaRecorder){showToast("ההקלטה לא נתמכת בדפדפן הזה");return}
+  let stream;try{stream=await navigator.mediaDevices.getUserMedia({audio:true})}catch(e){showToast("אין גישה למיקרופון, אשר הרשאה לאתר");return}
+  const mt=["audio/webm;codecs=opus","audio/mp4","audio/webm"].find(t=>MediaRecorder.isTypeSupported&&MediaRecorder.isTypeSupported(t))||"";
+  let mr;try{mr=new MediaRecorder(stream,mt?{mimeType:mt,audioBitsPerSecond:24000}:{audioBitsPerSecond:24000})}catch(_){mr=new MediaRecorder(stream)}
+  const chunks=[],r={mr,stream,t:0,timer:null,cancel:false};S.rec2=r;
+  mr.ondataavailable=e=>{if(e.data&&e.data.size)chunks.push(e.data)};
+  mr.onstop=()=>{
+    clearInterval(r.timer);stream.getTracks().forEach(t=>t.stop());S.rec2=null;
+    if(r.cancel||!chunks.length){renderRec();return}
+    const blob=new Blob(chunks,{type:mr.mimeType||mt||"audio/webm"});
+    const fr=new FileReader();
+    fr.onload=()=>{if(String(fr.result).length>700000)showToast("ההקלטה גדולה מדי, נסה קצרה יותר");else if(S.nd){S.nd.audio=fr.result;S.nd.dur=Math.max(1,r.t)}renderRec()};
+    fr.readAsDataURL(blob);
+  };
+  mr.start();
+  r.timer=setInterval(()=>{r.t++;const e=$("#recT");if(e)e.textContent=r.t;if(r.t>=20)stopRec()},1000);
+  renderRec();
+}
+function stopRec(cancel){const r=S.rec2;if(!r)return;r.cancel=!!cancel;try{if(r.mr.state!=="inactive")r.mr.stop();else S.rec2=null}catch(_){S.rec2=null}}
+function saveNote(){
+  const n=S.nd;if(!n)return;
+  if(S.rec2){showToast("סיים קודם את ההקלטה");return}
+  const v=S.items[n.id];if(!v){S.nd=null;hideSheet();return}
+  const text=norm(($("#noteText")||{}).value||"").slice(0,200);
+  const nv={...v};["noteText","noteAudio","noteBy","noteUid","noteDur","noteTs"].forEach(k=>delete nv[k]);
+  if(text)nv.noteText=text;
+  if(n.audio){nv.noteAudio=n.audio;nv.noteDur=n.dur||0}
+  if(text||n.audio){nv.noteBy=S.myName||"";if(S.me)nv.noteUid=S.me;nv.noteTs=Date.now()}
+  const had=!!(v.noteText||v.noteAudio);
+  S.nd=null;hideSheet();api.set("items",n.id,nv);render();
+  if(text||n.audio)showToast("ההערה נשמרה 💬");else if(had)showToast("ההערה נמחקה");
+}
+function playNote(id){
+  const v=S.items[id];if(!v||!v.noteAudio)return;
+  if(S.player){const was=S.playing,p=S.player;S.player=null;S.playing=null;try{p.pause()}catch(_){}render();if(was===id)return}
+  const a=new Audio(v.noteAudio);S.player=a;S.playing=id;
+  const end=()=>{if(S.player===a){S.player=null;S.playing=null;render()}};
+  a.onended=end;a.onpause=end;
+  a.play().catch(()=>{end();showToast("לא הצלחתי לנגן את ההקלטה")});render();
+}
 function missHtml(v){return v.missed&&!v.done?`<span class="miss">⚠️ לא היה בפעם הקודמת</span>`:""}
 function finishTrip(){
   const all=Object.entries(S.items),got=all.filter(([,v])=>v.done),left=all.filter(([,v])=>!v.done);
@@ -532,7 +597,7 @@ function openBulk(prefill,voiceFail,target){
   $("#sheet").classList.remove("hidden");
   setTimeout(()=>{const ta=$("#bulkText");if(ta){if(prefill)ta.value=prefill;ta.focus()}},50);
 }
-function closeSheet(){if(S.rec){S.recCancel=true;const f=S.recFinish;try{S.rec.abort()}catch(_){};if(f)f(false)}hideSheet()}
+function closeSheet(){if(S.rec2)stopRec(true);S.nd=null;if(S.rec){S.recCancel=true;const f=S.recFinish;try{S.rec.abort()}catch(_){};if(f)f(false)}hideSheet()}
 function hideSheet(){$("#sheet").classList.add("hidden");$("#sheet").innerHTML=""}
 function setCat(pid,cat){
   const p=S.pool[pid];if(!p){closeSheet();return}
@@ -600,7 +665,8 @@ function renderList(){
       (doneCount?`<div class="bar"><button class="btn ghost" id="clearDone">ניקוי ${doneCount} שנקנו</button></div>`:"");
   } else {
     $("#main").innerHTML=grouped(items).map(([c,list])=>`<section class="group"><h2><span>${esc(c)}</span><span>${list.length}</span></h2><div class="rows">`+
-      list.map(([id,v])=>`<div class="row${S.fresh.has(id)?" fresh":""}"><span class="name">${esc(v.name)}${missHtml(v)}${byHtml(v)}</span>
+      list.map(([id,v])=>`<div class="row${S.fresh.has(id)?" fresh":""}"><span class="name">${esc(v.name)}${missHtml(v)}${noteLine(v)}${byHtml(v)}</span>
+        <button class="nbtn${v.noteText||v.noteAudio?" has":""}" data-note="${id}" aria-label="הערה ל${esc(v.name)}">💬</button>
         <span class="qty"><button data-q="${id}" data-d="-1" aria-label="פחות">−</button><span>${v.qty||1}</span><button data-q="${id}" data-d="1" aria-label="עוד">+</button></span>
         <button class="del" data-del="${id}" aria-label="הסרת ${esc(v.name)}">✕</button></div>`).join("")+`</div></section>`).join("")+
       `<div class="bar"><button class="btn mark" data-go="shop">🛒 יוצא לסופר</button><button class="btn ghost" id="share">העתקה כטקסט</button><button class="btn ghost" id="clearAll">ניקוי הרשימה</button>${doneCount?`<button class="btn ghost" id="clearDone">ניקוי ${doneCount} שנקנו</button>`:""}</div><div id="copyBox"></div>`;
@@ -632,7 +698,7 @@ function renderShop(){
     <div class="stat"><span>${done} מתוך ${total} בעגלה</span><span>${total-done?`נשארו ${total-done}`:"הכול בעגלה 🎉"}</span></div>`:"");
   if(!total){$("#main").innerHTML=`<div class="empty"><b>אין מה לקנות</b>הוסף מוצרים לרשימה לפני היציאה לסופר.<br><button class="btn" data-go="list">לרשימה</button></div>`;return}
   const todo=all.filter(([,v])=>!v.done), got=all.filter(([,v])=>v.done).sort((a,b)=>(b[1].doneTs||0)-(a[1].doneTs||0));
-  const row=([id,v])=>`<button class="srow ${v.done?"done":""}${S.fresh.has(id)?" fresh":""}" data-t="${id}" aria-pressed="${!!v.done}"><span class="box">${check}</span><span class="sname">${esc(v.name)}${(v.qty||1)>1?`<em>×${v.qty}</em>`:""}${missHtml(v)}${byHtml(v)}</span></button>`;
+  const row=([id,v])=>`<div class="srw"><button class="srow ${v.done?"done":""}${S.fresh.has(id)?" fresh":""}" data-t="${id}" aria-pressed="${!!v.done}"><span class="box">${check}</span><span class="sname">${esc(v.name)}${(v.qty||1)>1?`<em>×${v.qty}</em>`:""}${missHtml(v)}${noteLine(v)}${byHtml(v)}</span></button>${v.noteAudio?`<button class="nplay${S.playing===id?" on":""}" data-play="${id}" aria-label="השמעת הערה קולית">${S.playing===id?"⏸️":"🔊"}</button>`:""}</div>`;
   $("#main").innerHTML=grouped(todo).map(([c,list])=>`<section class="group"><h2><span>${esc(c)}</span><span>${list.length}</span></h2><div class="rows">${list.map(row).join("")}</div></section>`).join("")+
     (got.length?`<section class="group"><h2><span>בעגלה</span><span>${got.length}</span></h2><div class="rows">${got.map(row).join("")}</div></section>`:"")+
     `<div class="bar">${got.length?`<button class="btn" id="finish">סיימתי, ניקוי ${got.length} שנקנו</button>`:""}</div>`;
@@ -649,6 +715,11 @@ document.addEventListener("click",e=>{
   if(t.id==="bulkOpen"){openBulk();return}
   if(t.id==="bulkGo"){const tx=$("#bulkText").value,c=$("#bulkCat").value,tg=S.bulkTarget;closeSheet();smartAdd(tx,c,tg);return}
   if(t.id==="sheetClose"){closeSheet();return}
+  if(t.dataset.note){openNote(t.dataset.note);return}
+  if(t.dataset.play){playNote(t.dataset.play);return}
+  if(t.id==="recBtn"){toggleRec();return}
+  if(t.id==="recDel"){if(S.nd){S.nd.audio="";S.nd.dur=0;renderRec()}return}
+  if(t.id==="noteSave"){saveNote();return}
   if(t.id==="nameSave"){saveName();return}
   if(t.id==="invite"){invite();return}
   if(t.id==="announce"){announce();return}
@@ -720,6 +791,7 @@ render();
   ["items","pool"].forEach(col=>{
     S.fam.collection(col).onSnapshot(snap=>{
       const m={};snap.docs.forEach(d=>{if(d.exists)m[d.id]=d.data()});
+      if(col==="items"&&got.items&&S.loadedAt){try{snap.docChanges().forEach(c=>{if(c.type!=="modified"||c.doc.metadata.hasPendingWrites)return;const n=c.doc.data(),p=S.raw.items[c.doc.id]||{};if((n.noteText||n.noteAudio)&&n.noteUid!==S.me&&(n.noteText!==p.noteText||n.noteAudio!==p.noteAudio)&&inList(n)&&!n.done){showToast(`💬 ${n.noteBy||"מישהו"} השאיר/ה הערה על ${n.name}`);if(navigator.vibrate)try{navigator.vibrate([60,40,60])}catch(_){}}})}catch(_){}}
       if(col==="items"&&got.items&&S.loadedAt&&Date.now()-S.loadedAt>3000){try{notifyNew(snap.docChanges().filter(c=>c.type==="added"&&!S.mine.has(c.doc.id)&&!c.doc.metadata.hasPendingWrites).map(c=>[c.doc.id,c.doc.data()]))}catch(_){}}
       S.raw[col]=m;applyList();got[col]=true;
       if(got.items&&got.pool){clearTimeout(timer);if(!S.loadedAt)S.loadedAt=Date.now();render();migrateCats()}
